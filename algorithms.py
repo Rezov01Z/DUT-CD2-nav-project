@@ -6,6 +6,12 @@ import time
 from queue import PriorityQueue
 from config import *
 
+def get_dist(p1, p2):
+    return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+
+def heuristic(p1, p2):
+    return get_dist(p1, p2)
+
 # --- CLASS NODE (Cho A*) ---
 class Node:
     def __init__(self, row, col, size, total_rows):
@@ -34,20 +40,19 @@ class Node:
 
     def update_neighbors(self, grid):
         self.neighbors = []
-        if self.row < self.total_rows - 1 and not grid[self.row + 1][self.col].is_barrier():
-            self.neighbors.append(grid[self.row + 1][self.col])
-        if self.row > 0 and not grid[self.row - 1][self.col].is_barrier():
-            self.neighbors.append(grid[self.row - 1][self.col])
-        if self.col < self.total_rows - 1 and not grid[self.row][self.col + 1].is_barrier():
-            self.neighbors.append(grid[self.row][self.col + 1])
-        if self.col > 0 and not grid[self.row][self.col - 1].is_barrier():
-            self.neighbors.append(grid[self.row][self.col - 1])
+        directions = [
+            (1, 0), (-1, 0), (0, 1), (0, -1),   # 4 hướng chính
+            (1, 1), (1, -1), (-1, 1), (-1, -1)  # 4 hướng chéo
+        ]
 
-# --- HELPER FUNCTIONS ---
-def heuristic(p1, p2): return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1])
-def get_dist(p1, p2): return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+        for dr, dc in directions:
+            r, c = self.row + dr, self.col + dc
+            
+            if 0 <= r < self.total_rows and 0 <= c < self.total_rows:
+                if not grid[r][c].is_barrier():
+                    self.neighbors.append(grid[r][c])
 
-# --- A* ALGORITHM ---
+# --- A* ALGORITHM (EUCLIDEAN VERSION) ---
 def reconstruct_path_astar(came_from, current, draw):
     path_len = 0
     while current in came_from:
@@ -64,10 +69,12 @@ def algorithm_astar(draw, grid, start, end):
     open_set = PriorityQueue()
     open_set.put((0, count, start))
     came_from = {}
+    
     g_score = {node: float("inf") for row in grid for node in row}
     g_score[start] = 0
     f_score = {node: float("inf") for row in grid for node in row}
     f_score[start] = heuristic(start.get_pos(), end.get_pos())
+    
     open_set_hash = {start}
 
     while not open_set.empty():
@@ -83,11 +90,15 @@ def algorithm_astar(draw, grid, start, end):
             return True, length, (time.time() - start_time) * 1000
 
         for neighbor in current.neighbors:
-            temp_g_score = g_score[current] + 1
+            step_cost = get_dist(current.get_pos(), neighbor.get_pos())
+            
+            temp_g_score = g_score[current] + step_cost
+
             if temp_g_score < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = temp_g_score
                 f_score[neighbor] = temp_g_score + heuristic(neighbor.get_pos(), end.get_pos())
+                
                 if neighbor not in open_set_hash:
                     count += 1
                     open_set.put((f_score[neighbor], count, neighbor))
@@ -97,13 +108,12 @@ def algorithm_astar(draw, grid, start, end):
         if current != start: current.make_closed()
     return False, 0, 0
 
-# --- RRT* (STAR) ALGORITHM ---
 class RRTNode:
     def __init__(self, x, y):
         self.x = x
         self.y = y
         self.parent = None
-        self.cost = 0.0 # (MỚI) Chi phí từ Start đến node này
+        self.cost = 0.0 
 
 def check_collision_line(n1, n2, grid):
     steps = int(get_dist((n1.x, n1.y), (n2.x, n2.y)) / (GRID_SIZE / 2)) + 1
@@ -128,14 +138,11 @@ def algorithm_rrt_star(win, grid, start_node, end_node):
         for event in pygame.event.get():
             if event.type == pygame.QUIT: pygame.quit()
 
-        # 1. Random Sample
         if random.randint(0, 100) < 5: rand_point = RRTNode(end_point.x, end_point.y)
         else: rand_point = RRTNode(random.randint(0, SCREEN_WIDTH), random.randint(0, SCREEN_HEIGHT))
 
-        # 2. Nearest Node
         nearest_node = min(tree, key=lambda n: get_dist((n.x, n.y), (rand_point.x, rand_point.y)))
 
-        # 3. Steer
         theta = math.atan2(rand_point.y - nearest_node.y, rand_point.x - nearest_node.x)
         new_x = nearest_node.x + RRT_STEP_SIZE * math.cos(theta)
         new_y = nearest_node.y + RRT_STEP_SIZE * math.sin(theta)
@@ -144,9 +151,7 @@ def algorithm_rrt_star(win, grid, start_node, end_node):
         if not (0 <= new_node.x < SCREEN_WIDTH and 0 <= new_node.y < SCREEN_HEIGHT): continue
         if check_collision_line(nearest_node, new_node, grid): continue
 
-        # --- RRT* LOGIC BẮT ĐẦU ---
-        
-        # 4. Choose Parent (Tìm cha tốt nhất trong vùng lân cận)
+        # Choose Parent
         near_nodes = [node for node in tree if get_dist((node.x, node.y), (new_node.x, new_node.y)) < RRT_SEARCH_RADIUS]
         min_cost = nearest_node.cost + get_dist((nearest_node.x, nearest_node.y), (new_node.x, new_node.y))
         new_node.parent = nearest_node
@@ -161,26 +166,23 @@ def algorithm_rrt_star(win, grid, start_node, end_node):
         
         tree.append(new_node)
         
-        # 5. Rewire (Đấu lại dây cho các node hàng xóm nếu đi qua node mới rẻ hơn)
+        # Rewire
         for near_node in near_nodes:
-            if near_node == new_node.parent: continue # Không đấu lại cha vừa chọn
+            if near_node == new_node.parent: continue
             if check_collision_line(new_node, near_node, grid): continue
             
             new_cost = new_node.cost + get_dist((new_node.x, new_node.y), (near_node.x, near_node.y))
             if new_cost < near_node.cost:
                 near_node.parent = new_node
                 near_node.cost = new_cost
-                # Lưu ý: Đúng ra phải update cost đệ quy cho con cháu, nhưng trong visual demo này bỏ qua để code nhanh.
 
-        # Draw Realtime
+        # Draw
         pygame.draw.circle(win, BLUE, (int(new_node.x), int(new_node.y)), 2)
         if new_node.parent:
             pygame.draw.line(win, BLUE, (new_node.parent.x, new_node.parent.y), (new_node.x, new_node.y), 1)
         pygame.display.update()
 
-        # 6. Check Goal
         if get_dist((new_node.x, new_node.y), (end_point.x, end_point.y)) < RRT_GOAL_RADIUS:
-            # Reconstruct Path
             path_len = new_node.cost + get_dist((new_node.x, new_node.y), (end_point.x, end_point.y))
             curr = new_node
             path_nodes = [(end_point.x, end_point.y)]

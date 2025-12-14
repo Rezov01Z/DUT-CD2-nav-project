@@ -1,7 +1,6 @@
 # main.py
 import pygame
 import matplotlib
-# Sử dụng backend TkAgg để tương thích tốt với cửa sổ Pygame
 matplotlib.use('TkAgg') 
 import matplotlib.pyplot as plt
 import sys
@@ -13,8 +12,6 @@ pygame.init()
 WIN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Project II: A* vs RRT* (With Success Rate)")
 
-# --- GLOBAL DATA HISTORY (Cấu trúc mới) ---
-# Bây giờ ta lưu thêm số lần 'attempts' (thử) và 'successes' (thành công)
 history = {
     "astar": {"times": [], "lengths": [], "attempts": 0, "successes": 0},
     "rrt_star": {"times": [], "lengths": [], "attempts": 0, "successes": 0}
@@ -31,8 +28,6 @@ def update_charts():
     algos = ['A*', 'RRT*']
     colors = ['#90EE90', '#87CEEB'] # Xanh lá vs Xanh dương
     
-    # 1. TÍNH TOÁN DỮ LIỆU
-    # Thời gian & Quãng đường trung bình (chỉ tính các lần thành công)
     avg_times = [
         np.mean(history["astar"]["times"]) if history["astar"]["times"] else 0,
         np.mean(history["rrt_star"]["times"]) if history["rrt_star"]["times"] else 0
@@ -42,7 +37,6 @@ def update_charts():
         np.mean(history["rrt_star"]["lengths"]) if history["rrt_star"]["lengths"] else 0
     ]
     
-    # Tỷ lệ thành công = (Thành công / Tổng thử) * 100
     success_rates = []
     for algo in ["astar", "rrt_star"]:
         attempts = history[algo]["attempts"]
@@ -50,7 +44,6 @@ def update_charts():
         rate = (successes / attempts * 100) if attempts > 0 else 0
         success_rates.append(rate)
 
-    # 2. VẼ BIỂU ĐỒ 1: THỜI GIAN (Time)
     bars1 = ax1.bar(algos, avg_times, color=colors)
     ax1.set_title('Avg Time (ms) - Lower is Better')
     ax1.set_ylabel('ms')
@@ -58,7 +51,6 @@ def update_charts():
         h = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2, h, f"{h:.1f}", ha='center', va='bottom')
 
-    # 3. VẼ BIỂU ĐỒ 2: QUÃNG ĐƯỜNG (Length)
     bars2 = ax2.bar(algos, avg_lens, color=colors)
     ax2.set_title('Avg Path Length (px) - Lower is Better')
     ax2.set_ylabel('Pixels')
@@ -66,8 +58,7 @@ def update_charts():
         h = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2, h, f"{int(h)}", ha='center', va='bottom')
 
-    # 4. VẼ BIỂU ĐỒ 3: TỶ LỆ THÀNH CÔNG (Success Rate)
-    # Nếu < 100% thì tô màu đỏ cảnh báo
+
     rate_colors = []
     for r, base_col in zip(success_rates, colors):
         rate_colors.append(base_col if r == 100 else '#FF6347') # Màu cà chua nếu fail
@@ -75,7 +66,7 @@ def update_charts():
     bars3 = ax3.bar(algos, success_rates, color=rate_colors)
     ax3.set_title('Success Rate (%) - Higher is Better')
     ax3.set_ylabel('%')
-    ax3.set_ylim(0, 110) # Cố định trục Y max là 110 để dễ nhìn
+    ax3.set_ylim(0, 110) 
     for i, bar in enumerate(bars3):
         h = bar.get_height()
         total = history["astar" if i==0 else "rrt_star"]["attempts"]
@@ -101,7 +92,6 @@ def draw(win, grid, rows, width, rrt_tree, rrt_path):
         for node in row:
             node.draw(win)
     
-    # Vẽ lại lưới mờ hơn chút để dễ nhìn đường
     gap = width // rows
     for i in range(rows):
         pygame.draw.line(win, (220, 220, 220), (0, i * gap), (width, i * gap))
@@ -131,7 +121,7 @@ def reset_algo_visuals(grid):
                 node.reset()
 
 def main():
-    global history  # <--- THÊM DÒNG NÀY ĐỂ SỬA LỖI
+    global history 
     
     grid = make_grid(ROWS, SCREEN_WIDTH)
     start = None; end = None
